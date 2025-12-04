@@ -1,0 +1,64 @@
+create database BankSystem;
+use BankSystem;
+
+create table accounts (
+	accountID int not null primary key auto_increment,
+    balance decimal (10,2)
+);
+create table transactions (
+	transactionID int not null primary key auto_increment,
+    fromAccountID int not null,
+    toAccountId int not null,
+    amount decimal ( 10,2),
+    transactionDate datetime,
+    foreign key (fromAccountID) references accounts (accountID),
+	foreign key (toAccountId) references accounts (accountID)
+);
+
+insert into accounts (balance) 
+values 
+(5000.00),
+(3000.00),
+(12000.00);	
+
+DELIMITER $$ 
+create procedure transferMoney(
+	in p_from int,
+    in p_to int,
+    in p_amount decimal(10,2)
+)
+begin 
+	declare current_balance decimal(10,2);
+    start transaction;
+    select balance into current_balance 
+    from accounts
+    where accountID = p_from
+    for update;
+    
+    if current_balance is Null then
+    signal sqlstate '45000'
+    set message_text = 'Tài khoản không tồn tại';
+    end if;
+    
+    if current_balance < p_amount then
+    signal sqlstate '45000'
+    set message_text = 'Tài khoản không đủ tiền';
+    end if;
+    
+    update accounts 
+    set balance = balance - p_amount
+    where accountID = p_from;
+    
+    update accounts 
+    set balance = balance + p_amount
+    where accountID = p_to;
+    
+    insert into transactions ( fromaccountID, toaccountID, amount)
+    values (p_from,p_to,p_amount);
+    commit;
+    end$$
+    DELIMITER ;
+    
+CALL TransferMoney(99, 1, 1000);
+
+CALL TransferMoney(1, 2, 100);
