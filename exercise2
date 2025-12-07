@@ -1,0 +1,131 @@
+create database BankSystem;
+use BankSystem;
+
+create table accounts (
+	accountID int not null primary key auto_increment,
+    balance decimal (10,2)
+);
+create table transactions (
+	transactionID int not null primary key auto_increment,
+    fromAccountID int not null,
+    toAccountId int not null,
+    amount decimal ( 10,2),
+    transactionDate datetime,
+    foreign key (fromAccountID) references accounts (accountID),
+	foreign key (toAccountId) references accounts (accountID)
+);
+
+insert into accounts (balance) 
+values 
+(5000.00),
+(3000.00),
+(12000.00);	
+
+DELIMITER $$ 
+create procedure transferMoney(
+	in p_from int,
+    in p_to int,
+    in p_amount decimal(10,2)
+)
+begin 
+	declare current_balance decimal(10,2);
+    start transaction;
+    select balance into current_balance 
+    from accounts
+    where accountID = p_from
+    for update;
+    
+    if current_balance is Null then
+    signal sqlstate '45000'
+    set message_text = 'Tài khoản không tồn tại';
+    end if;
+    
+    if current_balance < p_amount then
+    signal sqlstate '45000'
+    set message_text = 'Tài khoản không đủ tiền';
+    end if;
+    
+    update accounts 
+    set balance = balance - p_amount
+    where accountID = p_from;
+    
+    update accounts 
+    set balance = balance + p_amount
+    where accountID = p_to;
+    
+    insert into transactions ( fromaccountID, toaccountID, amount)
+    values (p_from,p_to,p_amount);
+    commit;
+    end$$
+    DELIMITER ;
+    
+CREATE TABLE budgets (
+    budgetID INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    accountID INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    month VARCHAR(20),
+    FOREIGN KEY (accountID) REFERENCES accounts(accountID)
+);
+
+CREATE TABLE expenses (
+    expenseID INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    accountID INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    expenseDate DATETIME,
+    description VARCHAR(255),
+    FOREIGN KEY (accountID) REFERENCES accounts(accountID)
+);
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_spend_money (
+    IN p_account_id INT,
+    IN p_category_id INT,
+    IN p_amount DECIMAL(10,2),
+    IN p_description VARCHAR(255)
+)
+BEGIN
+    DECLARE v_balance DECIMAL(10,2);
+    DECLARE v_spent DECIMAL(10,2);
+    DECLARE v_limit DECIMAL(10,2);
+
+    START TRANSACTION;
+    SELECT balance INTO v_balance
+    FROM Accounts
+    WHERE id = p_account_id
+    FOR UPDATE;  
+
+    IF v_balance IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Account does not exist';
+    END IF;
+
+    IF v_balance < p_amount THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Insufficient balance';
+    END IF;
+
+    UPDATE Accounts
+    SET balance = balance - p_amount
+    WHERE id = p_account_id;
+
+    INSERT INTO Expenses (account_id, amount, description, created_at)
+    VALUES (p_account_id, p_amount, p_description, NOW());
+
+    SELECT spent, limit_amount
+    INTO v_spent, v_limit
+    FROM Budgets
+    WHERE category_id = p_category_id
+    FOR UPDATE;
+
+    IF v_spent IS NOT NULL THEN
+        UPDATE Budgets
+        SET spent = spent + p_amount
+        WHERE category_id = p_category_id;
+    END IF;
+
+    COMMIT;
+END $$
+
+DELIMITER ;
